@@ -1,65 +1,82 @@
 name: CI
-
-on:
-  push:
-    branches-ignore:
-      - "dependabot/**"
-  pull_request:
-
-env:
-  FORCE_COLOR: 2
-  NODE: 16
-
+on: [push, workflow_dispatch]
 jobs:
-  test:
+  build:
+    name: "build svgomg"
     runs-on: ubuntu-latest
-
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
-      - name: Clone repository
-        uses: actions/checkout@v2
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: "${{ env.NODE }}"
-          cache: npm
-
-      - name: Install npm dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Build
-        run: npm run build
-
-      - name: Upload build files
-        uses: actions/upload-artifact@v2
-        if: github.repository == 'jakearchibald/svgomg' && github.ref == 'refs/heads/live'
-        with:
-          name: build
-          path: ./build/
-          if-no-files-found: error
+    - 
+      name: "checkout repo"
+      uses: actions/checkout@master
+    - 
+      name: "setup node v16"
+      uses: actions/setup-node@master
+      with:
+        node-version: 16
+    - 
+      name: "(env) pnpm"
+      run: curl -L https://pnpm.js.org/pnpm.js | node - add --global pnpm
+    - 
+      name: "(env) cache"
+      uses: actions/cache@master
+      with:
+        path: ~/.pnpm-store
+        key: ${{ runner.os }}-${{ matrix.nodejs }}-${{ hashFiles('**/package.json') }}
+        restore-keys: ${{ runner.os }}-${{ matrix.nodejs }}-
+    - 
+      name: "install dependencies"
+      run: pnpm install
+    - 
+      name: "build svgomg"
+      run: pnpm run build
+    - 
+      name: "upload artifact"
+      uses: actions/upload-artifact@master
+      if: github.repository == 'flourd/svgo'
+      with:
+        name: build
+        path: ./build/
+        if-no-files-found: error
 
   deploy:
     runs-on: ubuntu-latest
-    needs: test
-    if: github.repository == 'jakearchibald/svgomg' && github.ref == 'refs/heads/live'
-
+    needs: [build]
+    if: github.repository == 'flourd/svgo'
     steps:
-      - name: Clone repository
-        uses: actions/checkout@v2
-
-      - name: Download build files
-        uses: actions/download-artifact@v2
+      - 
+        name: "checkout repo"
+        uses: actions/checkout@master
+      - 
+        name: "download artifacts"
+        uses: actions/download-artifact@master
         with:
           name: build
           path: ./build/
-
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
+      -
+        name: "(env) setup gpg"
+        uses: crazy-max/ghaction-import-gpg@v3
         with:
-          allow_empty_commit: false
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: ./build/
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git-user-signingkey: true
+          git-config-global: true
+          git-commit-gpgsign: true
+          git-tag-gpgsign: true
+      - 
+        if: success()
+        name: "🚀 deploy"
+        uses: crazy-max/ghaction-github-pages@v2.6.0
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        with:
+          author: "Nicholas Berlette <nick@berlette.com>"
+          committer: "Nicholas Berlette <nick@berlette.com>"
+          commit_message: "🚀"
+          target_branch: docs
+          build_dir: build
+          fqdn: svgo.tk
+          keep_history: true
+          dry_run: false
+          verbose: true
+          jekyll: false
