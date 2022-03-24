@@ -73,7 +73,7 @@ jobs:
           author: "Nicholas Berlette <nick@berlette.com>"
           committer: "Nicholas Berlette <nick@berlette.com>"
           commit_message: "🚀"
-          target_branch: docs
+          target_branch: gh-pages
           build_dir: build
           fqdn: svgo.tk
           keep_history: true
